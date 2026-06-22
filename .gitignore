@@ -1,0 +1,14 @@
+.DS_Store
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+dist/
+build/
+
+# Local-only launcher shims (Hermes-env workaround: strip /opt/hermes from
+# PYTHONPATH/sys.path so this project's `cli` package isn't shadowed). Not part
+# of the product — real users run the installed `ck-creds` console script. Kept
+# out of the repo to avoid leaking the internal /opt/hermes path.
+/ck-creds
+/ck_creds_entry.py

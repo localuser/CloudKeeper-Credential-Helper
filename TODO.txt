@@ -1,0 +1,186 @@
+ck-creds CLI — TODO / Next Steps
+=================================
+
+MUST-HAVE
+---------
+[ ] Fix Path 1 (MSAL → SAML) — currently blocked by AADSTS650057
+    • Register a custom Azure AD app (not the public MS CLI app)
+    • Grant it API permission for the IAM Identity Center enterprise app:
+        Application ID URI: https://<region>.signin.aws.amazon.com/platform/saml/d-XXXXXXXXXX
+        Azure App ID:       <azure-enterprise-app-object-id>
+    • Set the new client_id in ~/.ck_creds/config.json
+    • Re-test: ck-creds login (no --path2)
+
+[ ] Publish ck-creds entry-point properly
+    • The current ck-creds bash wrapper works only from the repo directory
+    • Options: pipx install -e . OR add to PATH properly
+    • Fix PYTHONPATH conflict at install level instead of via env -u PYTHONPATH wrapper
+      (add sys.path fixup directly to cli/__main__.py so any invocation works)
+
+[ ] Integration tests against live environment
+    • Currently 5 smoke tests skip without CK_INTEGRATION=1
+    • Run: CK_INTEGRATION=1 pytest tests/test_integration_smoke.py -v -s
+    • Requires valid token in ~/.ck_creds/ and network access to AWS
+
+
+SHOULD-HAVE
+-----------
+[ ] Multi-account discovery: CloudKeeper environments expose many customer accounts
+    • Current setup shows only accounts directly assigned in IAM Identity Center
+    • Investigate: a CrossAccountAssumeRole-style role in the SSO hub account may chain to further accounts
+      via sts:AssumeRole — enumerate those too and present as selectable targets
+    • Document the hub-and-spoke IAM pattern in README
+
+[ ] Token refresh for Path 2
+    • OIDC accessToken TTL is ~8h; OidcAuthenticator re-prompts after expiry
+    • AWS SSO OIDC issues a refreshToken alongside accessToken — implement silent refresh
+      using CreateToken with grant_type=refresh_token before falling back to device code
+    • Add refresh_token field to oidc_portal_token.json cache
+
+[ ] credential_process profile generator command
+    • ck-creds generate-profiles --path2
+    • Calls list_account_roles(), writes [profile <account-name>] blocks to ~/.aws/config
+      automatically — no manual copy-pasting
+
+[ ] Shell completion
+    • click supports --install-completion for bash/zsh/fish
+    • Wire up: ck-creds --install-completion
+
+
+NICE-TO-HAVE
+------------
+[ ] Windows support
+    • Token cache uses os.chmod(0o600) which is a no-op on Windows
+    • Credentials writer uses configparser which is cross-platform
+    • Test under Windows / WSL2
+
+[ ] exec command: smarter aws CLI detection
+    • Currently fails if aws is not on PATH inside the container/venv
+    • Should detect aws in venv or offer to install: uv pip install awscli
+
+[ ] Configurable credential TTL per profile
+    • StsClient already has a duration fallback ladder (12h → 4h → 1h → 15m)
+    • Expose --duration flag on login / credential-process commands
+
+[ ] Audit log
+    • Write a ~/.ck_creds/audit.log: timestamp, account, role, expiry for each creds fetch
+    • Useful for compliance / debugging
+
+[ ] Test: add unit tests for SsoClient (cli/aws/sso_client.py)
+    • Currently 0 dedicated unit tests; boto3 calls are only exercised in integration tests
+    • Mock boto3 SSO client, cover list_account_roles() + get_credentials() + pagination
+
+
+KNOWN ISSUES
+------------
+[!] Path 1 permanently blocked on this tenant config (AADSTS650057)
+    Root cause: client_id 04b07795-8ddb-461a-bbee-02f9e1bf7b46 (MS Azure CLI public app)
+    is not permitted to request tokens for the IAM Identity Center resource.
+    Fix: see "Fix Path 1" task above.
+
+[!] Portal HTTP API 401 with OIDC token
+    The IAM Identity Center portal HTTP API (portal.sso.*.amazonaws.com) requires a
+    SAML-exchange cookie token, not the OIDC accessToken. Path 2 therefore uses the
+    boto3 SSO API (list_accounts / get_role_credentials) instead. The portal HTTP API
+    is only needed if you want to enumerate SAML app instances beyond what boto3 exposes
+    (e.g. non-account apps). See cli/aws/sso_client.py for the working approach.
+
+
+DONE
+----
+[x] feat: env-var ROPC auth — non-interactive login from Hermes TUI
+    • cli/auth/env_auth.py — EnvAuthenticator with ROPC → TOTP → device-code fallback
+    • CK_CREDS_USERNAME + CK_CREDS_PASSWORD in .env → auto-detected in _get_portal_token()
+    • Username can also be saved to config.json via: ck-creds configure --username <upn>
+    • TOTP prompt remains interactive (not stored anywhere) — pty=true in Hermes terminal()
+    • 15 unit tests (tests/auth/test_env_auth.py), 118 passing total
+    Hermes TUI usage:
+      1. Set CK_CREDS_USERNAME=... CK_CREDS_PASSWORD=... in .env
+      2. terminal("ck-creds login --path2", pty=True)
+      3. If MFA prompt appears → ask user for TOTP → submit it
+
+=================================
+
+MUST-HAVE
+---------
+[ ] Fix Path 1 (MSAL → SAML) — currently blocked by AADSTS650057
+    • Register a custom Azure AD app (not the public MS CLI app)
+    • Grant it API permission for the IAM Identity Center enterprise app:
+        Application ID URI: https://<region>.signin.aws.amazon.com/platform/saml/d-XXXXXXXXXX
+        Azure App ID:       <azure-enterprise-app-object-id>
+    • Set the new client_id in ~/.ck_creds/config.json
+    • Re-test: ck-creds login (no --path2)
+
+[ ] Publish ck-creds entry-point properly
+    • The current ck-creds bash wrapper works only from the repo directory
+    • Options: pipx install -e . OR add to PATH properly
+    • Fix PYTHONPATH conflict at install level instead of via env -u PYTHONPATH wrapper
+      (add sys.path fixup directly to cli/__main__.py so any invocation works)
+
+[ ] Integration tests against live environment
+    • Currently 5 smoke tests skip without CK_INTEGRATION=1
+    • Run: CK_INTEGRATION=1 pytest tests/test_integration_smoke.py -v -s
+    • Requires valid token in ~/.ck_creds/ and network access to AWS
+
+
+SHOULD-HAVE
+-----------
+[ ] Multi-account discovery: CloudKeeper environments expose many customer accounts
+    • Current setup shows only accounts directly assigned in IAM Identity Center
+    • Investigate: a CrossAccountAssumeRole-style role in the SSO hub account may chain to further accounts
+      via sts:AssumeRole — enumerate those too and present as selectable targets
+    • Document the hub-and-spoke IAM pattern in README
+
+[ ] Token refresh for Path 2
+    • OIDC accessToken TTL is ~8h; OidcAuthenticator re-prompts after expiry
+    • AWS SSO OIDC issues a refreshToken alongside accessToken — implement silent refresh
+      using CreateToken with grant_type=refresh_token before falling back to device code
+    • Add refresh_token field to oidc_portal_token.json cache
+
+[ ] credential_process profile generator command
+    • ck-creds generate-profiles --path2
+    • Calls list_account_roles(), writes [profile <account-name>] blocks to ~/.aws/config
+      automatically — no manual copy-pasting
+
+[ ] Shell completion
+    • click supports --install-completion for bash/zsh/fish
+    • Wire up: ck-creds --install-completion
+
+
+NICE-TO-HAVE
+------------
+[ ] Windows support
+    • Token cache uses os.chmod(0o600) which is a no-op on Windows
+    • Credentials writer uses configparser which is cross-platform
+    • Test under Windows / WSL2
+
+[ ] exec command: smarter aws CLI detection
+    • Currently fails if aws is not on PATH inside the container/venv
+    • Should detect aws in venv or offer to install: uv pip install awscli
+
+[ ] Configurable credential TTL per profile
+    • StsClient already has a duration fallback ladder (12h → 4h → 1h → 15m)
+    • Expose --duration flag on login / credential-process commands
+
+[ ] Audit log
+    • Write a ~/.ck_creds/audit.log: timestamp, account, role, expiry for each creds fetch
+    • Useful for compliance / debugging
+
+[ ] Test: add unit tests for SsoClient (cli/aws/sso_client.py)
+    • Currently 0 dedicated unit tests; boto3 calls are only exercised in integration tests
+    • Mock boto3 SSO client, cover list_account_roles() + get_credentials() + pagination
+
+
+KNOWN ISSUES
+------------
+[!] Path 1 permanently blocked on this tenant config (AADSTS650057)
+    Root cause: client_id 04b07795-8ddb-461a-bbee-02f9e1bf7b46 (MS Azure CLI public app)
+    is not permitted to request tokens for the IAM Identity Center resource.
+    Fix: see "Fix Path 1" task above.
+
+[!] Portal HTTP API 401 with OIDC token
+    The IAM Identity Center portal HTTP API (portal.sso.*.amazonaws.com) requires a
+    SAML-exchange cookie token, not the OIDC accessToken. Path 2 therefore uses the
+    boto3 SSO API (list_accounts / get_role_credentials) instead. The portal HTTP API
+    is only needed if you want to enumerate SAML app instances beyond what boto3 exposes
+    (e.g. non-account apps). See cli/aws/sso_client.py for the working approach.
